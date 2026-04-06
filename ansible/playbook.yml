@@ -1,0 +1,104 @@
+---
+- name: Install Tomcat and deploy Hello World app
+  hosts: webserver
+  become: yes
+  vars:
+    tomcat_version: "9.0.85"
+    tomcat_home: "/opt/tomcat"
+    tomcat_port: 8070
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Java 11
+      apt:
+        name: openjdk-11-jdk
+        state: present
+
+    - name: Create tomcat group
+      group:
+        name: tomcat
+        state: present
+
+    - name: Create tomcat user
+      user:
+        name: tomcat
+        group: tomcat
+        home: "{{ tomcat_home }}"
+        shell: /bin/false
+        create_home: yes
+        system: yes
+
+    - name: Download Tomcat {{ tomcat_version }}
+      get_url:
+        url: "https://archive.apache.org/dist/tomcat/tomcat-9/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
+        dest: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract Tomcat
+      unarchive:
+        src: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+        dest: "{{ tomcat_home }}"
+        remote_src: yes
+        extra_opts: [--strip-components=1]
+        creates: "{{ tomcat_home }}/bin/startup.sh"
+
+    - name: Configure Tomcat port to {{ tomcat_port }}
+      replace:
+        path: "{{ tomcat_home }}/conf/server.xml"
+        regexp: 'port="8080"'
+        replace: 'port="{{ tomcat_port }}"'
+
+    - name: Set ownership of Tomcat directory
+      file:
+        path: "{{ tomcat_home }}"
+        owner: tomcat
+        group: tomcat
+        recurse: yes
+
+    - name: Copy WAR to Tomcat webapps
+      copy:
+        src: "{{ war_file }}"
+        dest: "{{ tomcat_home }}/webapps/simplej2ee.war"
+        owner: tomcat
+        group: tomcat
+        mode: '0644'
+
+    - name: Create Tomcat systemd service
+      copy:
+        dest: /etc/systemd/system/tomcat.service
+        content: |
+          [Unit]
+          Description=Apache Tomcat 9
+          After=network.target
+
+          [Service]
+          Type=forking
+          User=tomcat
+          Group=tomcat
+          Environment="JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64"
+          Environment="CATALINA_HOME={{ tomcat_home }}"
+          Environment="CATALINA_PID={{ tomcat_home }}/temp/tomcat.pid"
+          ExecStart={{ tomcat_home }}/bin/startup.sh
+          ExecStop={{ tomcat_home }}/bin/shutdown.sh
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start Tomcat
+      systemd:
+        name: tomcat
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Wait for Tomcat to be ready on port {{ tomcat_port }}
+      wait_for:
+        port: "{{ tomcat_port }}"
+        delay: 5
+        timeout: 60
