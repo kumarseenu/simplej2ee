@@ -1,0 +1,40 @@
+---
+- name: Redeploy J2EE app and restart Tomcat
+  hosts: webserver
+  become: yes
+  vars:
+    tomcat_home: "/opt/tomcat"
+    tomcat_port: 8070
+
+  tasks:
+    - name: Stop Tomcat
+      systemd:
+        name: tomcat
+        state: stopped
+
+    - name: Remove old WAR and exploded deployment
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ tomcat_home }}/webapps/simplej2ee.war"
+        - "{{ tomcat_home }}/webapps/simplej2ee"
+
+    - name: Copy new WAR to Tomcat webapps
+      copy:
+        src: "{{ war_file }}"
+        dest: "{{ tomcat_home }}/webapps/simplej2ee.war"
+        owner: tomcat
+        group: tomcat
+        mode: '0644'
+
+    - name: Start Tomcat
+      systemd:
+        name: tomcat
+        state: started
+
+    - name: Wait for Tomcat to be ready on port {{ tomcat_port }}
+      wait_for:
+        port: "{{ tomcat_port }}"
+        delay: 5
+        timeout: 60

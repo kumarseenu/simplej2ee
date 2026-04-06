@@ -11,6 +11,12 @@
     <packaging>war</packaging>
     <name>Simple J2EE Hello World</name>
 
+    <properties>
+        <!-- Overridden at build time: mvn package -Dapp.version=1.2 -Dapp.commit=abc1234 -->
+        <app.version>dev</app.version>
+        <app.commit>local</app.commit>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>javax.servlet</groupId>
@@ -22,6 +28,12 @@
 
     <build>
         <finalName>simplej2ee</finalName>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
